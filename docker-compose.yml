@@ -1,9 +1,9 @@
 version: '3.3'
 services:
-  intacct-utilization-localstack:
+  localstack:
     image: localstack/localstack
-    container_name: intacct-utilization-localstack
-    hostname: intacct-utilization-localstack
+    container_name: localstack
+    hostname: localstack
     healthcheck:
       test: [ "./health.sh" ]
       interval: 5s
