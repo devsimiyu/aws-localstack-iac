@@ -12,7 +12,6 @@ services:
       start_period: 30s
     environment:
       - DEBUG=1
-      - HOSTNAME=intacct-utilization-localstack
       - LOCALSTACK_HOSTNAME=0.0.0.0
       - PORT_WEB_UI=8080
       - DATA_DIR=/tmp/localstack/data
