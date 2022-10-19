@@ -15,7 +15,7 @@ services:
       - LOCALSTACK_HOSTNAME=0.0.0.0
       - PORT_WEB_UI=8080
       - DATA_DIR=/tmp/localstack/data
-      - DEFAULT_REGION=us-east-1
+      - DEFAULT_REGION=${AWS_REGION}
       - SERVICES=cloudformation,lambda
       - EAGER_SERVICE_LOADING=1
       - LAMBDA_EXECUTOR=docker
