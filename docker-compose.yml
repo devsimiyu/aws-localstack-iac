@@ -1,0 +1,30 @@
+version: '3.3'
+services:
+  intacct-utilization-localstack:
+    image: localstack/localstack
+    container_name: intacct-utilization-localstack
+    hostname: intacct-utilization-localstack
+    healthcheck:
+      test: [ "./health.sh" ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      - DEBUG=1
+      - HOSTNAME=intacct-utilization-localstack
+      - LOCALSTACK_HOSTNAME=0.0.0.0
+      - PORT_WEB_UI=8080
+      - DATA_DIR=/tmp/localstack/data
+      - DEFAULT_REGION=us-east-1
+      - SERVICES=cloudformation,lambda,s3
+      - EAGER_SERVICE_LOADING=1
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - ./tmp/localstack:/tmp/localstack
+      - ///var/run/docker.sock:/var/run/docker.sock
+      - ~/.aws:/root/.aws
+    ports:
+      - ${LOCALSTACK_UI_PORT}:8080
+      - ${LOCALSTACK_SERVICE_PORT}:4566

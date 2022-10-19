@@ -1,0 +1,14 @@
+[
+    {
+        "ParameterKey": "ApiFunctionName",
+        "ParameterValue": "intacct-gateway-lambda-func"
+    },
+    {
+        "ParameterKey": "ApiFunctionRoleName",
+        "ParameterValue": "IntacctGatewayLambdaRole"
+    },
+    {
+        "ParameterKey": "ApiFunctionHandler",
+        "ParameterValue": "gateway.hander"
+    }
+]

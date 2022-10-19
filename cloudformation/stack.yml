@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  ApiFunctionName:
+    Type: String
+  ApiFunctionRoleName:
+    Type: String
+  ApiFunctionHandler:
+    Type: String
+Resources:
+  ApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref ApiFunctionRoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action: sts:AssumeRole
+        ManagedPolicyArns: 
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+  ApiFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          exports.handler = async function (event, context) {
+            console.log("NEW EVENT:", Date.now());
+            console.table(JSON.stringify(event, null, 2));
+            return context.logStreamName;
+          };
+      Role: !GetAtt ApiFunctionRole.Arn
+      FunctionName: !Ref ApiFunctionName
+      Handler: !Ref ApiFunctionHandler
+      Description: Api Gateway Lambda Function
+      PackageType: Zip
+      Runtime: nodejs14.x
