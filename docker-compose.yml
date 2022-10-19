@@ -5,8 +5,8 @@ services:
     container_name: localstack
     hostname: localstack
     healthcheck:
-      test: [ "./health.sh" ]
-      interval: 5s
+      test: sh health.sh "local"
+      interval: 10s
       timeout: 10s
       retries: 5
       start_period: 30s
@@ -20,10 +20,12 @@ services:
       - EAGER_SERVICE_LOADING=1
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
+    working_dir: /cloudformation
     volumes:
       - ./tmp/localstack:/tmp/localstack
       - ///var/run/docker.sock:/var/run/docker.sock
       - ~/.aws:/root/.aws
+      - ./cloudformation:/cloudformation
     ports:
       - ${LOCALSTACK_UI_PORT}:8080
       - ${LOCALSTACK_SERVICE_PORT}:4566
