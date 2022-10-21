@@ -7,6 +7,8 @@ aws_profile=$([ ! -z "$DEFAULT_PROFILE" ] && echo "--profile $DEFAULT_PROFILE")
 
 echo "Health check on $1"
 
-aws $aws_endpoint $aws_profile lambda list-functions
-aws $aws_endpoint $aws_profile cloudformation list-stacks
 aws $aws_endpoint $aws_profile apigateway get-rest-apis
+aws $aws_endpoint $aws_profile lambda list-functions
+aws $aws_endpoint $aws_profile sns list-topics
+aws $aws_endpoint $aws_profile sqs list-queues
+aws $aws_endpoint $aws_profile cloudformation list-stacks

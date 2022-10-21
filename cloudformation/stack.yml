@@ -1,11 +1,70 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: "AWS::Serverless-2016-10-31"
+
 Resources:
+
+  VPCBox:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPCBox
+      InternetGatewayId: !Ref InternetGateway
+
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: !Ref InternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCBox
+      CidrBlock: 10.0.0.0/17
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCBox
+      CidrBlock: 10.0.128.0/17
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCBox
+
+  PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCBox
+
+  PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
   ApiGateway:
     Type: AWS::Serverless::Api
     Properties:
       Name: Intacct Utilization HTTP API Gateway
       StageName: dev
+
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -20,7 +79,157 @@ Resources:
             RestApiId: !Ref ApiGateway
             Path: /gateway
             Method: POST
+      Environment:
+        Variables:
+          AWS_TOPIC_INTACCT: !GetAtt IntacctNotificationHub.Arn
+          AWS_TOPIC_PROCORE: !GetAtt ProcoreNotificationHub.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PublicSubnet
+
+  IntacctWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/lambda/webhook/intacct
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt IntacctMessagingQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+
+  IntacctWebhookDeadLetterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/lambda/dead-letter/intacct
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt IntacctMessagingDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt IntacctWebhookFunctionDeadLetterQueue.Arn
+  
+  ProcoreWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/lambda/webhook/procore
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ProcoreMessagingQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+  
+  ProcoreWebhookDeadLetterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/lambda/dead-letter/procore
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ProcoreMessagingDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt ProcoreWebhookFunctionDeadLetterQueue.Arn
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Private Security Group
+      GroupDescription: Allow inbound traffic from within VPC
+      VpcId: !Ref VPCBox
+      SecurityGroupIngress:
+        - IpProtocol: "-1"
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  IntacctNotificationHub:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: intacct-webhook-notification
+      Subscription:
+        - Protocol: sqs
+          Endpoint: !GetAtt IntacctMessagingQueue.Arn
+
+  ProcoreNotificationHub:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: procore-webhook-notification
+      Subscription:
+        - Protocol: sqs
+          Endpoint: !GetAtt ProcoreMessagingQueue.Arn
+
+  IntacctMessagingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IntacctMessagingDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  IntacctMessagingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-dead-letter-queue
+  
+  IntacctWebhookFunctionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-function-dead-letter-queue
+
+  ProcoreMessagingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcoreMessagingDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  ProcoreMessagingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-dead-letter-queue
+
+  ProcoreWebhookFunctionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-function-dead-letter-queue
+
 Outputs:
+
   ApiGateway:
     Description: 'API Gateway endpoint URL for dev'
     Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev'

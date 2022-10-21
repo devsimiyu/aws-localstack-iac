@@ -8,7 +8,7 @@ services:
     hostname: localstack
     healthcheck:
       test: cd /devops && make healthcheck e=local
-      interval: 10s
+      interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
@@ -17,10 +17,10 @@ services:
       - LOCALSTACK_HOSTNAME=0.0.0.0
       - PORT_WEB_UI=8080
       - DATA_DIR=/tmp/localstack/data
-      - DEFAULT_PROFILE=${AWS_PROFILE}
-      - DEFAULT_REGION=${AWS_REGION}
-      - DEFAULT_STACK=${AWS_STACK}
-      - SERVICES=cloudformation,lambda,sam,apigateway
+      - DEFAULT_PROFILE=${DEFAULT_PROFILE}
+      - DEFAULT_REGION=${DEFAULT_REGION}
+      - DEFAULT_STACK=${DEFAULT_STACK}
+      - SERVICES=sam,cloudformation,apigateway,lambda,sns.sqs
       - EAGER_SERVICE_LOADING=1
       - LAMBDA_EXECUTOR=local
     volumes:
