@@ -1,11 +1,14 @@
-aws_endpoint=$([ "$1" == "local" ] && echo "--endpoint-url http://localhost:$LOCALSTACK_SERVICE_PORT")
-aws_profile=$([ ! -z "$AWS_PROFILE" ] && echo "--profile $AWS_PROFILE")
+#!/bin/sh
+
+set -e
+
+aws_sam=$([ "$1" = "local" ] && echo "samlocal" || "sam")
+aws_profile=$([ ! -z "$DEFAULT_PROFILE" ] && echo "--profile $DEFAULT_PROFILE")
 
 echo "Deploying stack to $1"
 
-aws cloudformation deploy \
-    $aws_endpoint \
-    $aws_profile \
-    --stack-name $CLOUDFORMATION_STACK_NAME \
-    --template-file cloudformation/stack.yml \
-    --parameter-overrides file://cloudformation/parameters.json
+$aws_sam deploy $aws_profile \
+    --resolve-s3 \
+    --force-upload \
+    --stack-name $DEFAULT_STACK \
+    --template-file cloudformation/stack.yml

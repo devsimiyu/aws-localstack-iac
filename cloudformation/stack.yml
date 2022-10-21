@@ -1,39 +1,26 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Parameters:
-  ApiFunctionName:
-    Type: String
-  ApiFunctionRoleName:
-    Type: String
-  ApiFunctionHandler:
-    Type: String
+Transform: "AWS::Serverless-2016-10-31"
 Resources:
-  ApiFunctionRole:
-    Type: AWS::IAM::Role
+  ApiGateway:
+    Type: AWS::Serverless::Api
     Properties:
-      RoleName: !Ref ApiFunctionRoleName
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-              - lambda.amazonaws.com
-            Action: sts:AssumeRole
-        ManagedPolicyArns: 
-          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Name: Intacct Utilization HTTP API Gateway
+      StageName: dev
   ApiFunction:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Serverless::Function
     Properties:
-      Code:
-        ZipFile: |
-          exports.handler = async function (event, context) {
-            console.log("NEW EVENT:", Date.now());
-            console.table(JSON.stringify(event, null, 2));
-            return context.logStreamName;
-          };
-      Role: !GetAtt ApiFunctionRole.Arn
-      FunctionName: !Ref ApiFunctionName
-      Handler: !Ref ApiFunctionHandler
-      Description: Api Gateway Lambda Function
+      CodeUri: ../src/lambda/api
+      Handler: index.handler
       PackageType: Zip
       Runtime: nodejs14.x
+      Events:
+        Http:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /gateway
+            Method: POST
+Outputs:
+  ApiGateway:
+    Description: 'API Gateway endpoint URL for dev'
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev'

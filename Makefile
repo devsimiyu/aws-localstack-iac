@@ -1,8 +1,11 @@
 include .env
 export
 
-deploy:
-	sh cloudformation/deploy.sh "${e}"
+local:
+	sh cloudformation/deploy.sh "local"
+
+prod: bash
+	sh cloudformation/deploy.sh "prod"
 
 healthcheck:
 	sh cloudformation/health.sh "${e}"
