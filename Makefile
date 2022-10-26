@@ -4,7 +4,7 @@ export
 local:
 	sh cloudformation/deploy.sh "local"
 
-prod: bash
+prod:
 	sh cloudformation/deploy.sh "prod"
 
 healthcheck:
