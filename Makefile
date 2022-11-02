@@ -1,11 +1,14 @@
 include .env
 export
 
-local:
-	sh cloudformation/deploy.sh "local"
+localstack:
+	docker compose up -d procore-intacct-localstack
 
-prod:
-	sh cloudformation/deploy.sh "prod"
+deploy:
+	sh devops/cloudformation.sh
 
-healthcheck:
-	sh cloudformation/health.sh "${e}"
+package:
+	sh devops/cloudformation.sh "package"
+
+sync:
+	sam sync --stack-name $(AWS_STACK) --watch

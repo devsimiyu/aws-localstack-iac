@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="original_lambda_archive">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/tmp/localstack/function.zipfile.ec4f8f46/original_lambda_archive.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

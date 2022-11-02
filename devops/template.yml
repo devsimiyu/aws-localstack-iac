@@ -1,6 +1,46 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: "AWS::Serverless-2016-10-31"
 
+Parameters:
+
+  AwsEnv:
+    Type: String
+    Default: local
+  
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+
+  AwsEndpoint:
+    Type: String
+    Default: http://localhost:4566
+
+  AwsPackagingStack:
+    Type: String
+    Default: procore-intacct-cloudformation-packaging
+
+Conditions:
+
+  CreateProdResources: !Equals
+    - !Ref AwsEnv
+    - prod
+
+Globals:
+
+  Function:
+    Runtime: nodejs14.x
+    Handler: index.handler
+    Timeout: 180
+    VpcConfig:
+      SecurityGroupIds:
+        - !Ref FunctionSecurityGroup
+      SubnetIds:
+        - !If [ CreateProdResources, !Ref PrivateSubnet, !Ref PublicSubnet ]
+    Environment:
+      Variables:
+        AwsRegion: !Ref AwsRegion
+        AwsEndpoint: !If [ CreateProdResources, AWS::NoValue, !Ref AwsEndpoint ]
+
 Resources:
 
   VPCBox:
@@ -8,34 +48,11 @@ Resources:
     Properties:
       CidrBlock: 10.0.0.0/16
 
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-
-  InternetGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref VPCBox
-      InternetGatewayId: !Ref InternetGateway
-
-  InternetGatewayRoute:
-    Type: AWS::EC2::Route
-    DependsOn: !Ref InternetGateway
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPCBox
       CidrBlock: 10.0.0.0/17
-
-  PrivateSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPCBox
-      CidrBlock: 10.0.128.0/17
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -48,6 +65,12 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet
 
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCBox
+      CidrBlock: 10.0.128.0/17
+
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -59,19 +82,72 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateSubnet
 
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPCBox
+      InternetGatewayId: !Ref InternetGateway
+
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateProdResources
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Condition: CreateProdResources
+    Properties:
+      Domain: vpc
+
+  NATGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Condition: CreateProdResources
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+
   ApiGateway:
     Type: AWS::Serverless::Api
     Properties:
-      Name: Intacct Utilization HTTP API Gateway
-      StageName: dev
+      Name: Procore Intacct Utilization API Gateway
+      StageName: Runtime
 
-  ApiFunction:
+  FunctionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Lambda Security Group
+      GroupDescription: Firewall for lambda functions
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+  
+  GatewayFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../src/lambda/api
-      Handler: index.handler
-      PackageType: Zip
-      Runtime: nodejs14.x
+      CodeUri: ../src/lambda/gateway
+      Handler: dist/main.handler
       Events:
         Http:
           Type: Api
@@ -81,47 +157,36 @@ Resources:
             Method: POST
       Environment:
         Variables:
-          AWS_TOPIC_INTACCT: !GetAtt IntacctNotificationHub.Arn
-          AWS_TOPIC_PROCORE: !GetAtt ProcoreNotificationHub.Arn
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PublicSubnet
+          AwsTopicIntacct: !GetAtt IntacctNotificationHub.Arn
+          AwsTopicProcore: !GetAtt ProcoreNotificationHub.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - src/main.ts
 
   IntacctWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../src/lambda/webhook/intacct
-      Handler: index.handler
-      Runtime: nodejs14.x
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt IntacctMessagingQueue.Arn
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
 
   IntacctWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../src/lambda/dead-letter/intacct
-      Handler: index.handler
-      Runtime: nodejs14.x
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt IntacctMessagingDeadLetterQueue.Arn
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
       DeadLetterQueue:
         Type: SQS
         TargetArn: !GetAtt IntacctWebhookFunctionDeadLetterQueue.Arn
@@ -130,51 +195,24 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../src/lambda/webhook/procore
-      Handler: index.handler
-      Runtime: nodejs14.x
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt ProcoreMessagingQueue.Arn
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
   
   ProcoreWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ../src/lambda/dead-letter/procore
-      Handler: index.handler
-      Runtime: nodejs14.x
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt ProcoreMessagingDeadLetterQueue.Arn
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
       DeadLetterQueue:
         Type: SQS
         TargetArn: !GetAtt ProcoreWebhookFunctionDeadLetterQueue.Arn
-
-  LambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: Private Security Group
-      GroupDescription: Allow inbound traffic from within VPC
-      VpcId: !Ref VPCBox
-      SecurityGroupIngress:
-        - IpProtocol: "-1"
-          CidrIp: 10.0.0.0/16
-      SecurityGroupEgress:
-        - IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
 
   IntacctNotificationHub:
     Type: AWS::SNS::Topic
@@ -232,4 +270,4 @@ Outputs:
 
   ApiGateway:
     Description: 'API Gateway endpoint URL for dev'
-    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev'
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Runtime'

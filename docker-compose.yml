@@ -1,32 +1,42 @@
-version: '3.3'
+version: '2.9'
+
 services:
-  localstack:
-    build:
-      context: .
-    image: localstack
-    container_name: localstack
-    hostname: localstack
+
+  procore-intacct-localstack:
+    image: localstack/localstack
+    container_name: procore-intacct-localstack
+    hostname: procore-intacct-localstack
     healthcheck:
-      test: cd /devops && make healthcheck e=local
-      interval: 30s
+      test: awslocal cloudformation list-stacks
+      interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
     environment:
-      - DEBUG=1
-      - LOCALSTACK_HOSTNAME=0.0.0.0
-      - PORT_WEB_UI=8080
-      - DATA_DIR=/tmp/localstack/data
-      - DEFAULT_PROFILE=${DEFAULT_PROFILE}
-      - DEFAULT_REGION=${DEFAULT_REGION}
-      - DEFAULT_STACK=${DEFAULT_STACK}
-      - SERVICES=sam,cloudformation,apigateway,lambda,sns.sqs
+      - SERVICES=sam,cloudformation,apigateway,lambda,sns,sqs
       - EAGER_SERVICE_LOADING=1
       - LAMBDA_EXECUTOR=local
+      - LOCALSTACK_HOSTNAME=0.0.0.0
+      - DATA_DIR=/tmp/localstack/data
+      - DEBUG=1
     volumes:
-      - ./tmp/localstack:/tmp/localstack
+      - procore-intacct-localstack-volume:/tmp/localstack
       - ~/.aws:/root/.aws
-      - ./:/devops
     ports:
-      - 2000:8080
-      - 2001:4566
+      - '2001:4566'
+
+  procore-intacct-gateway-lambda:
+    build:
+      context: ./src/lambda/gateway
+    image: procore-intacct-gateway-lambda
+    container_name: procore-intacct-gateway-lambda
+    hostname: procore-intacct-gateway-lambda
+    environment:
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ENDPOINT="http://localhost:2001"
+      - AWS_TOPIC_PROCORE=${AWS_TOPIC_PROCORE}
+      - AWS_TOPIC_INTACCT=${AWS_TOPIC_INTACCT}
+
+volumes:
+  procore-intacct-localstack-volume:
+    driver: local
