@@ -5,7 +5,7 @@ Parameters:
 
   AwsEnv:
     Type: String
-    Default: local
+    Default: prod
   
   AwsRegion:
     Type: String
@@ -13,33 +13,21 @@ Parameters:
 
   AwsEndpoint:
     Type: String
-    Default: http://localhost:4566
-
-  AwsPackagingStack:
-    Type: String
-    Default: procore-intacct-cloudformation-packaging
-
-Conditions:
-
-  CreateProdResources: !Equals
-    - !Ref AwsEnv
-    - prod
 
 Globals:
 
   Function:
-    Runtime: nodejs14.x
-    Handler: index.handler
-    Timeout: 180
+    Timeout: 30
     VpcConfig:
       SecurityGroupIds:
         - !Ref FunctionSecurityGroup
       SubnetIds:
-        - !If [ CreateProdResources, !Ref PrivateSubnet, !Ref PublicSubnet ]
+        - !Ref PrivateSubnet
     Environment:
       Variables:
         AwsRegion: !Ref AwsRegion
-        AwsEndpoint: !If [ CreateProdResources, AWS::NoValue, !Ref AwsEndpoint ]
+        AwsEndpoint: !Ref AwsEndpoint
+        AwsEnv: !Ref AwsEnv
 
 Resources:
 
@@ -101,21 +89,18 @@ Resources:
 
   NatGateway:
     Type: AWS::EC2::NatGateway
-    Condition: CreateProdResources
     Properties:
       SubnetId: !Ref PublicSubnet
       AllocationId: !GetAtt NatGatewayEIP.AllocationId
 
   NatGatewayEIP:
     Type: AWS::EC2::EIP
-    Condition: CreateProdResources
     Properties:
       Domain: vpc
 
   NATGatewayRoute:
     Type: AWS::EC2::Route
     DependsOn: NatGateway
-    Condition: CreateProdResources
     Properties:
       RouteTableId: !Ref PrivateRouteTable
       DestinationCidrBlock: '0.0.0.0/0'
@@ -132,13 +117,14 @@ Resources:
     Properties:
       GroupName: Lambda Security Group
       GroupDescription: Firewall for lambda functions
+      VpcId: !Ref VPCBox
       SecurityGroupIngress:
-        - IpProtocol: -1
+        - IpProtocol: "-1"
           FromPort: -1
           ToPort: -1
           CidrIp: 10.0.0.0/16
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: "-1"
           FromPort: -1
           ToPort: -1
           CidrIp: 0.0.0.0/0
@@ -146,8 +132,7 @@ Resources:
   GatewayFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../src/lambda/gateway
-      Handler: dist/main.handler
+      PackageType: Image
       Events:
         Http:
           Type: Api
@@ -157,20 +142,18 @@ Resources:
             Method: POST
       Environment:
         Variables:
-          AwsTopicIntacct: !GetAtt IntacctNotificationHub.Arn
-          AwsTopicProcore: !GetAtt ProcoreNotificationHub.Arn
+          AwsTopicIntacct: !GetAtt IntacctNotificationHub.TopicArn
+          AwsTopicProcore: !GetAtt ProcoreNotificationHub.TopicArn
     Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Minify: true
-        Target: es2020
-        Sourcemap: true
-        EntryPoints:
-          - src/main.ts
+      DockerContext: ../src/lambda/gateway
+      Dockerfile: Dockerfile
+      DockerTag: v1
 
   IntacctWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
       CodeUri: ../src/lambda/webhook/intacct
       Events:
         SqsTrigger:
@@ -181,6 +164,8 @@ Resources:
   IntacctWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
       CodeUri: ../src/lambda/dead-letter/intacct
       Events:
         SqsTrigger:
@@ -194,6 +179,8 @@ Resources:
   ProcoreWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
       CodeUri: ../src/lambda/webhook/procore
       Events:
         SqsTrigger:
@@ -204,6 +191,8 @@ Resources:
   ProcoreWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
       CodeUri: ../src/lambda/dead-letter/procore
       Events:
         SqsTrigger:
@@ -271,3 +260,27 @@ Outputs:
   ApiGateway:
     Description: 'API Gateway endpoint URL for dev'
     Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Runtime'
+  
+  ProcoreNotificationHub:
+    Description: 'Procore SNS topic ARN'
+    Value: !GetAtt ProcoreNotificationHub.TopicArn
+
+  ProcoreMessagingQueue:
+    Description: 'Procore SQS ARN'
+    Value: !GetAtt ProcoreMessagingQueue.Arn
+
+  ProcoreWebhookFunctionDeadLetterQueue:
+    Description: 'Procore Dead-letter SQS ARN'
+    Value: !GetAtt ProcoreWebhookFunctionDeadLetterQueue.Arn
+  
+  IntacctNotificationHub:
+    Description: 'Intacct SNS topic ARN'
+    Value: !GetAtt IntacctNotificationHub.TopicArn
+
+  IntacctMessagingQueue:
+    Description: 'Intacct SQS ARN'
+    Value: !GetAtt IntacctMessagingQueue.Arn
+
+  IntacctWebhookFunctionDeadLetterQueue:
+    Description: 'Procore Dead-letter SQS ARN'
+    Value: !GetAtt IntacctWebhookFunctionDeadLetterQueue.Arn

@@ -10,7 +10,7 @@ export const handler: Handler = async (
   try {
     const app = await NestFactory.createApplicationContext(AppModule);
     const service = app.get(AppService);
-    const payload = JSON.parse(event);
+    const payload = JSON.parse(event.body);
     service.broadcast(payload);
     return {
       statusCode: 200,

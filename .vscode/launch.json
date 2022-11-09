@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "type": "aws-sam",
+      "request": "direct-invoke",
+      "name": "http:GatewayFunction",
+      "invokeTarget": {
+        "target": "api",
+        "templatePath": "${workspaceFolder}/.devops/template.yaml",
+        "logicalId": "GatewayFunction"
+      },
+      "api": {
+        "path": "/gateway",
+        "httpMethod": "post",
+        "payload": {
+          "json": {
+            "type": "PROCORE",
+            "message": "new project 1234 from procore"
+          }
+        }
+      },
+      "lambda": {
+        "environmentVariables": {
+          "AwsTopicIntacct": "arn:aws:sns:us-east-1:780041187732:intacct-webhook-notification",
+          "AwsTopicProcore": "arn:aws:sns:us-east-1:780041187732:procore-webhook-notification",
+          "AwsRegion": "us-east-1",
+          "AwsEndpoint": "http://localhost:4566",
+          "AwsEnv": "prod"
+        },
+        "pathMappings": [
+          {
+            "localRoot": "${workspaceFolder}/src/lambda/gateway",
+            "remoteRoot": "/var/task"
+          }
+        ],
+        "runtime": "nodejs14.x"
+      },
+      "aws": {
+        "credentials": "profile:wsrodgerss",
+        "region": "us-east-1"
+      }
+    }
+  ]
+}

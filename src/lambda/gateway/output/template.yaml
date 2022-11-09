@@ -1,0 +1,331 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  AwsEnv:
+    Type: String
+    Default: prod
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+  AwsEndpoint:
+    Type: String
+Globals:
+  Function:
+    Timeout: 30
+    VpcConfig:
+      SecurityGroupIds:
+      - Ref: FunctionSecurityGroup
+      SubnetIds:
+      - Ref: PrivateSubnet
+    Environment:
+      Variables:
+        AwsRegion:
+          Ref: AwsRegion
+        AwsEndpoint:
+          Ref: AwsEndpoint
+        AwsEnv:
+          Ref: AwsEnv
+Resources:
+  VPCBox:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPCBox
+      CidrBlock: 10.0.0.0/17
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPCBox
+  PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPCBox
+      CidrBlock: 10.0.128.0/17
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPCBox
+  PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      SubnetId:
+        Ref: PrivateSubnet
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPCBox
+      InternetGatewayId:
+        Ref: InternetGateway
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: InternetGateway
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet
+      AllocationId:
+        Fn::GetAtt:
+        - NatGatewayEIP
+        - AllocationId
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NATGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        Ref: NatGateway
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: Procore Intacct Utilization API Gateway
+      StageName: Runtime
+  FunctionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Lambda Security Group
+      GroupDescription: Firewall for lambda functions
+      VpcId:
+        Ref: VPCBox
+      SecurityGroupIngress:
+      - IpProtocol: '-1'
+        FromPort: -1
+        ToPort: -1
+        CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+      - IpProtocol: '-1'
+        FromPort: -1
+        ToPort: -1
+        CidrIp: '0.0.0.0/0'
+  GatewayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Events:
+        Http:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ApiGateway
+            Path: /gateway
+            Method: POST
+      Environment:
+        Variables:
+          AwsTopicIntacct:
+            Fn::GetAtt:
+            - IntacctNotificationHub
+            - TopicArn
+          AwsTopicProcore:
+            Fn::GetAtt:
+            - ProcoreNotificationHub
+            - TopicArn
+      ImageUri: gatewayfunction:v1-debug
+    Metadata:
+      DockerContext: D:\Projects\TheJitu\project-u\iac\src\lambda\gateway
+      DockerTag: v1
+      Dockerfile: Dockerfile
+      SamResourceId: GatewayFunction
+  IntacctWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
+      CodeUri: IntacctWebhookFunction
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - IntacctMessagingQueue
+              - Arn
+    Metadata:
+      SamResourceId: IntacctWebhookFunction
+  IntacctWebhookDeadLetterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
+      CodeUri: IntacctWebhookDeadLetterFunction
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - IntacctMessagingDeadLetterQueue
+              - Arn
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn:
+          Fn::GetAtt:
+          - IntacctWebhookFunctionDeadLetterQueue
+          - Arn
+    Metadata:
+      SamResourceId: IntacctWebhookDeadLetterFunction
+  ProcoreWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
+      CodeUri: ProcoreWebhookFunction
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - ProcoreMessagingQueue
+              - Arn
+    Metadata:
+      SamResourceId: ProcoreWebhookFunction
+  ProcoreWebhookDeadLetterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs14.x
+      Handler: index.handler
+      CodeUri: ProcoreWebhookDeadLetterFunction
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - ProcoreMessagingDeadLetterQueue
+              - Arn
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn:
+          Fn::GetAtt:
+          - ProcoreWebhookFunctionDeadLetterQueue
+          - Arn
+    Metadata:
+      SamResourceId: ProcoreWebhookDeadLetterFunction
+  IntacctNotificationHub:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: intacct-webhook-notification
+      Subscription:
+      - Protocol: sqs
+        Endpoint:
+          Fn::GetAtt:
+          - IntacctMessagingQueue
+          - Arn
+  ProcoreNotificationHub:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: procore-webhook-notification
+      Subscription:
+      - Protocol: sqs
+        Endpoint:
+          Fn::GetAtt:
+          - ProcoreMessagingQueue
+          - Arn
+  IntacctMessagingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-queue
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - IntacctMessagingDeadLetterQueue
+          - Arn
+        maxReceiveCount: 5
+  IntacctMessagingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-dead-letter-queue
+  IntacctWebhookFunctionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: intacct-webhook-function-dead-letter-queue
+  ProcoreMessagingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-queue
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - ProcoreMessagingDeadLetterQueue
+          - Arn
+        maxReceiveCount: 5
+  ProcoreMessagingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-dead-letter-queue
+  ProcoreWebhookFunctionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: procore-webhook-function-dead-letter-queue
+Outputs:
+  ApiGateway:
+    Description: API Gateway endpoint URL for dev
+    Value:
+      Fn::Sub: https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Runtime
+  ProcoreNotificationHub:
+    Description: Procore SNS topic ARN
+    Value:
+      Fn::GetAtt:
+      - ProcoreNotificationHub
+      - TopicArn
+  ProcoreMessagingQueue:
+    Description: Procore SQS ARN
+    Value:
+      Fn::GetAtt:
+      - ProcoreMessagingQueue
+      - Arn
+  ProcoreWebhookFunctionDeadLetterQueue:
+    Description: Procore Dead-letter SQS ARN
+    Value:
+      Fn::GetAtt:
+      - ProcoreWebhookFunctionDeadLetterQueue
+      - Arn
+  IntacctNotificationHub:
+    Description: Intacct SNS topic ARN
+    Value:
+      Fn::GetAtt:
+      - IntacctNotificationHub
+      - TopicArn
+  IntacctMessagingQueue:
+    Description: Intacct SQS ARN
+    Value:
+      Fn::GetAtt:
+      - IntacctMessagingQueue
+      - Arn
+  IntacctWebhookFunctionDeadLetterQueue:
+    Description: Procore Dead-letter SQS ARN
+    Value:
+      Fn::GetAtt:
+      - IntacctWebhookFunctionDeadLetterQueue
+      - Arn

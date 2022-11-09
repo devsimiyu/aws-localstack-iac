@@ -4,11 +4,11 @@ export
 localstack:
 	docker compose up -d procore-intacct-localstack
 
-deploy:
-	sh devops/cloudformation.sh
+deploy: validate
+	sh .devops/stack.sh "deploy"
 
-package:
-	sh devops/cloudformation.sh "package"
+validate:
+	sh .devops/stack.sh "validate"
 
-sync:
-	sam sync --stack-name $(AWS_STACK) --watch
+destroy:
+	sh .devops/stack.sh "destroy"

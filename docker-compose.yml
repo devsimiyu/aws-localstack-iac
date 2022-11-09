@@ -25,18 +25,7 @@ services:
     ports:
       - '2001:4566'
 
-  procore-intacct-gateway-lambda:
-    build:
-      context: ./src/lambda/gateway
-    image: procore-intacct-gateway-lambda
-    container_name: procore-intacct-gateway-lambda
-    hostname: procore-intacct-gateway-lambda
-    environment:
-      - AWS_REGION=${AWS_REGION}
-      - AWS_ENDPOINT="http://localhost:2001"
-      - AWS_TOPIC_PROCORE=${AWS_TOPIC_PROCORE}
-      - AWS_TOPIC_INTACCT=${AWS_TOPIC_INTACCT}
-
 volumes:
+
   procore-intacct-localstack-volume:
     driver: local
