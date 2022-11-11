@@ -1,1 +1,0 @@
-{"GatewayFunction":{"AwsTopicIntacct":"arn:aws:sns:us-east-1:780041187732:intacct-webhook-notification","AwsTopicProcore":"arn:aws:sns:us-east-1:780041187732:procore-webhook-notification","AwsRegion":"us-east-1","AwsEndpoint":"http://localhost:4566","AwsEnv":"prod"}}

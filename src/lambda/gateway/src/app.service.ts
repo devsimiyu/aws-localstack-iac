@@ -12,6 +12,7 @@ export class AppService {
   });
 
   async broadcast(event: any): Promise<void> {
+    console.log('received event', event);
     let topic: string;
     switch (event.type) {
       case Notification.PROCORE:
@@ -24,6 +25,7 @@ export class AppService {
         throw new Error('Failed to broadcast webhook');
       }
     }
+    console.log('broadcasting message to', topic);
     await this.notification.publish({
       TopicArn: topic,
       Message: event.message

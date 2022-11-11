@@ -152,14 +152,16 @@ Resources:
   IntacctWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: nodejs14.x
-      Handler: index.handler
-      CodeUri: ../src/lambda/webhook/intacct
+      PackageType: Image
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt IntacctMessagingQueue.Arn
+    Metadata:
+      DockerContext: ../src/lambda/webhooks/intacct-webhook
+      Dockerfile: Dockerfile
+      DockerTag: v1
 
   IntacctWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
@@ -179,14 +181,16 @@ Resources:
   ProcoreWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: nodejs14.x
-      Handler: index.handler
-      CodeUri: ../src/lambda/webhook/procore
+      PackageType: Image
       Events:
         SqsTrigger:
           Type: SQS
           Properties:
             Queue: !GetAtt ProcoreMessagingQueue.Arn
+    Metadata:
+      DockerContext: ../src/lambda/webhooks/procore-webhook
+      Dockerfile: Dockerfile
+      DockerTag: v1
   
   ProcoreWebhookDeadLetterFunction:
     Type: AWS::Serverless::Function
