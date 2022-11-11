@@ -39,6 +39,37 @@
         "credentials": "profile:wsrodgerss",
         "region": "us-east-1"
       }
+    },
+    {
+      "type": "aws-sam",
+      "request": "direct-invoke",
+      "name": "sqs:IntacctWebhookFunction",
+      "invokeTarget": {
+        "target": "template",
+        "templatePath": "${workspaceFolder}/.devops/template.yaml",
+        "logicalId": "IntacctWebhookFunction"
+      },
+      "lambda": {
+        "environmentVariables": {
+          "AwsRegion": "us-east-1",
+          "AwsEndpoint": "",
+          "AwsEnv": "prod"
+        },
+        "pathMappings": [
+          {
+            "localRoot": "${workspaceFolder}/src/lambda/webhooks/intacct-webhook",
+            "remoteRoot": "/var/task"
+          }
+        ],
+        "runtime": "nodejs14.x",
+        "payload": {
+          "path": "${workspaceFolder}/.vscode/lambda/payload/intacct-webhook.json"
+        }
+      },
+      "aws": {
+        "credentials": "profile:wsrodgerss",
+        "region": "us-east-1"
+      }
     }
   ]
 }
